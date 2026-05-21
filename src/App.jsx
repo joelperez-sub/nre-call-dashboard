@@ -14,6 +14,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_OcP2Dk_rfPQMRphCJw3pcQ_RXJD0Uzn";
 
 const REFRESH_MS = 120000; // auto-refresh every 2 min
 const LOOKBACK_DAYS = 7;   // how much history to chart
+const STALE_MIN = 15;      // refresh line turns amber if last pull older than this (minutes)
 
 // ---- THEME ----------------------------------------------------------------
 const C = {
@@ -73,6 +74,13 @@ const azHour = (iso) => azDate(iso).getUTCHours();
 const fmtHM = (sec) => { const h = Math.floor(sec / 3600); const m = Math.round((sec % 3600) / 60); return h > 0 ? `${h}h ${pad(m)}m` : `${m}m`; };
 const fmtClock = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 const todayKey = () => dayKey(new Date().toISOString());
+// format an epoch ms into AZ wall-clock like "12:14P"
+const fmtRefresh = (ms) =>
+  new Date(ms)
+    .toLocaleTimeString("en-US", { timeZone: "America/Phoenix", hour: "numeric", minute: "2-digit" })
+    .replace(/\s/g, "")
+    .replace("PM", "P")
+    .replace("AM", "A");
 
 // ============================================================================
 export default function App() {
@@ -81,15 +89,19 @@ export default function App() {
   const [now, setNow] = useState(new Date());
   const [status, setStatus] = useState("loading"); // loading | ok | error
   const [errMsg, setErrMsg] = useState("");
+  const [lastRefresh, setLastRefresh] = useState(null); // epoch ms of last GOOD pull
 
   const refresh = () => {
     loadRows()
-      .then((r) => { setRows(r); setStatus("ok"); })
+      .then((r) => { setRows(r); setStatus("ok"); setLastRefresh(Date.now()); })
       .catch((e) => { setStatus("error"); setErrMsg(String(e.message || e)); });
   };
 
   useEffect(() => { refresh(); const t = setInterval(refresh, REFRESH_MS); return () => clearInterval(t); }, []);
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+
+  // staleness recomputes every second because `now` ticks the component
+  const refreshStale = lastRefresh != null && (now.getTime() - lastRefresh) / 60000 > STALE_MIN;
 
   const tKey = todayKey();
   const scoped = useMemo(
@@ -192,9 +204,17 @@ export default function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <Segmented scope={scope} setScope={setScope} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="disp" style={{ fontSize: 26, fontWeight: 700, letterSpacing: 1 }}>{fmtClock(now)}</span>
-            <span className="live-dot" style={{ background: status === "ok" ? C.lime : status === "error" ? C.red : C.amber }} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="disp" style={{ fontSize: 26, fontWeight: 700, letterSpacing: 1 }}>{fmtClock(now)}</span>
+              <span className="live-dot" style={{ background: status === "ok" ? C.lime : status === "error" ? C.red : C.amber }} />
+            </div>
+            <div style={{ fontSize: 10, letterSpacing: 1.5, marginTop: 2, textTransform: "uppercase",
+              color: refreshStale ? C.amber : C.dimmer }}>
+              {lastRefresh
+                ? `${refreshStale ? "⚠ " : ""}Refreshed ${fmtRefresh(lastRefresh)}`
+                : "Refreshing…"}
+            </div>
           </div>
         </div>
       </div>
