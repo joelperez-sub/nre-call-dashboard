@@ -222,7 +222,7 @@ export default function App() {
       {/* TOP TILES */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
         <Tile label="TEAM DIALS" value={team.dials.toLocaleString()} sub={scope === "day" ? "today" : `last ${LOOKBACK_DAYS} days`} color={C.lime} />
-        <Tile label="TEAM TALK TIME" value={fmtHM(team.talk)} sub={`${(team.talk / Math.max(1, team.conn) / 60).toFixed(1)}m avg / connect`} color={C.cyan} />
+        <Tile label="TEAM TALK TIME" value={fmtHM(team.talk)} sub={`all calls · ${(team.talk / Math.max(1, scoped.filter((r) => (r.duration_sec || 0) > 0).length) / 60).toFixed(1)}m avg / talked`} color={C.cyan} />
         <Tile label="CONNECT RATE" value={`${(team.rate * 100).toFixed(0)}%`} sub={`${team.conn.toLocaleString()} connects · 60s+`} color={C.amber} pct={team.rate} />
         <Tile label="BEST HOUR TO DIAL" value={bestHour ? `${pad(bestHour.hour)}:00` : "—"} sub={bestHour ? `${((bestHour.conn / Math.max(1, bestHour.dials)) * 100).toFixed(0)}% connect` : ""} color={C.violet} />
       </div>
