@@ -20,6 +20,7 @@ const C = {
   bg: "#0a0e1a", panel: "#0f1626", panelHi: "#131c30", line: "#1d2942",
   text: "#e8edf7", dim: "#5d6b87", dimmer: "#3a4660",
   lime: "#c4f042", cyan: "#4fd6e8", amber: "#f0b429", red: "#f0556d", violet: "#a78bfa",
+  subtoSky: "#5bc2f0",
 };
 
 // ---- LIVE DATA FETCH ------------------------------------------------------
@@ -119,6 +120,27 @@ export default function App() {
     return h.filter((x) => x.hour >= 6 && x.hour <= 20);
   }, [scoped]);
 
+  // DIAL RACE: cumulative dials per rep by AZ hour — always TODAY only.
+  // All reps included; top 10 by day total get color + labels, rest are grey pack.
+  const race = useMemo(() => {
+    const todays = rows.filter((r) => dayKey(r.ts) === tKey && r.direction !== "inbound");
+    const HOURS = Array.from({ length: 15 }, (_, i) => i + 6); // 6..20
+    const perRep = {};
+    todays.forEach((r) => {
+      const hr = azHour(r.ts);
+      const rep = (perRep[r.rep] ||= { rep: r.rep, total: 0, byHour: {} });
+      rep.total++;
+      rep.byHour[hr] = (rep.byHour[hr] || 0) + 1;
+    });
+    const reps = Object.values(perRep).map((rp) => {
+      let run = 0;
+      const cum = HOURS.map((h) => { run += rp.byHour[h] || 0; return run; });
+      return { rep: rp.rep, total: rp.total, cum };
+    }).sort((a, b) => b.total - a.total);
+    const maxTotal = Math.max(1, ...reps.map((r) => r.total));
+    return { reps, hours: HOURS, maxTotal };
+  }, [rows, tKey]);
+
   const weekTrend = useMemo(() => {
     const m = {};
     rows.forEach((r) => { const k = dayKey(r.ts); (m[k] ||= { k, dials: 0, conn: 0 }); m[k].dials++; if (r.connected) m[k].conn++; });
@@ -155,14 +177,13 @@ export default function App() {
 
       {/* HEADER */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div className="disp" style={{ fontWeight: 900, fontSize: 15, letterSpacing: 2, padding: "5px 10px", border: `1.5px solid ${C.text}`, borderRadius: 4 }}>NRE</div>
-          <div>
-            <div className="disp" style={{ fontWeight: 800, fontSize: 18, letterSpacing: 3 }}>CALL ACTIVITY</div>
-            <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, marginTop: 2 }}>
-              {now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase()} · SALES ORG
-            </div>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+          <span className="disp" style={{ fontWeight: 900, fontSize: 24, letterSpacing: 1 }}>NEW REACH</span>
+          <span style={{ width: 1, height: 30, background: C.line, margin: "0 18px" }} />
+          <span className="disp" style={{ fontWeight: 800, fontSize: 22, letterSpacing: 0.5, color: C.subtoSky }}>SubTo</span>
+          <span style={{ fontSize: 10, color: C.dim, letterSpacing: 2, marginLeft: 14, textTransform: "uppercase" }}>
+            Call Activity · {now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <Segmented scope={scope} setScope={setScope} />
@@ -181,6 +202,9 @@ export default function App() {
         <Tile label="BEST HOUR TO DIAL" value={bestHour ? `${pad(bestHour.hour)}:00` : "—"} sub={bestHour ? `${((bestHour.conn / Math.max(1, bestHour.dials)) * 100).toFixed(0)}% connect` : ""} color={C.violet} />
       </div>
 
+      {/* HERO: DIAL RACE */}
+      <DialRace race={race} />
+
       {/* LEADERBOARDS + TICKER */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 260px", gap: 14, marginBottom: 14 }}>
         <Leaderboard title="LEADERBOARD · DIALS" rows={byRep} max={maxDials} metric={(r) => r.dials} fmt={(v) => v} color={C.lime} />
@@ -195,6 +219,71 @@ export default function App() {
       </div>
 
       <WeekTrend trend={weekTrend} />
+    </div>
+  );
+}
+
+function DialRace({ race }) {
+  const PALETTE = [C.lime, C.cyan, C.violet, C.amber, C.red, "#5ad19a", "#e879c9", "#7aa2f7", "#f4a261", "#9ece6a"];
+  const W = 1400, H = 300, padL = 48, padR = 188, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const hours = race.hours;
+  const maxX = hours.length - 1;
+  const ceilY = Math.max(50, Math.ceil(race.maxTotal / 50) * 50);
+  const x = (i) => padL + (i / maxX) * plotW;
+  const y = (v) => padT + plotH - (v / ceilY) * plotH;
+  const hLabel = (h) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "a" : "p"}`;
+
+  const top = race.reps.slice(0, 10);
+  const pack = race.reps.slice(10);
+
+  const gridVals = [];
+  const step = Math.max(50, Math.round(ceilY / 6 / 50) * 50);
+  for (let v = 0; v <= ceilY; v += step) gridVals.push(v);
+
+  // stagger end labels so they don't overlap
+  const labelMin = 13;
+  const placed = top.map((r, idx) => ({ idx, yEnd: y(r.cum[r.cum.length - 1]) }))
+    .sort((a, b) => a.yEnd - b.yEnd);
+  const labelY = {};
+  let prev = -Infinity;
+  placed.forEach((p) => { const ly = Math.max(p.yEnd, prev + labelMin); labelY[p.idx] = ly; prev = ly; });
+
+  const pathFor = (cum) => cum.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+
+  return (
+    <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "14px 18px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 2 }}>
+        <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2 }}>DIAL RACE · CUMULATIVE DIALS BY HOUR</div>
+        <div style={{ fontSize: 10, color: C.dimmer, letterSpacing: 1 }}>today · top 10 highlighted · all reps shown</div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", width: "100%", height: "auto" }}>
+        {gridVals.map((v) => (
+          <g key={v}>
+            <line x1={padL} y1={y(v)} x2={padL + plotW} y2={y(v)} stroke={C.line} strokeWidth="1" />
+            <text x={padL - 8} y={y(v) + 4} textAnchor="end" fill={C.dimmer} fontSize="10" fontFamily="'DM Mono',monospace">{v}</text>
+          </g>
+        ))}
+        {hours.map((h, i) => (
+          <text key={h} x={x(i)} y={padT + plotH + 20} textAnchor="middle" fill={C.dim} fontSize="10" fontFamily="'DM Mono',monospace">{hLabel(h)}</text>
+        ))}
+        {pack.map((r) => (
+          <path key={r.rep} d={pathFor(r.cum)} fill="none" stroke={C.dimmer} strokeWidth="1" opacity="0.4" strokeLinejoin="round" />
+        ))}
+        {top.map((r, i) => {
+          const col = PALETTE[i % PALETTE.length];
+          const lastX = x(maxX), lastY = y(r.cum[r.cum.length - 1]);
+          return (
+            <g key={r.rep}>
+              <path d={pathFor(r.cum)} fill="none" stroke={col} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.95" />
+              <circle cx={lastX} cy={lastY} r="3.5" fill={col} />
+              <line x1={lastX} y1={lastY} x2={lastX + 8} y2={labelY[i]} stroke={col} strokeWidth="1" opacity="0.5" />
+              <text x={lastX + 11} y={labelY[i] - 1} fill={col} fontSize="11" fontFamily="'DM Mono',monospace" fontWeight="500">{r.rep}</text>
+              <text x={lastX + 11} y={labelY[i] + 11} fill={col} fontSize="11" fontFamily="'Archivo',sans-serif" fontWeight="700">{r.total}</text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
