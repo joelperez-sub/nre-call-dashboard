@@ -13,7 +13,7 @@ const SUPABASE_URL = "https://npzzsdqmqpdbtiacafhw.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_OcP2Dk_rfPQMRphCJw3pcQ_RXJD0Uzn";
 
 const REFRESH_MS = 120000; // auto-refresh every 2 min
-const LOOKBACK_DAYS = 14;   // how much history to chart
+const LOOKBACK_DAYS = 7;   // how much history to chart
 
 // ---- THEME ----------------------------------------------------------------
 const C = {
@@ -23,20 +23,39 @@ const C = {
 };
 
 // ---- LIVE DATA FETCH ------------------------------------------------------
+// PostgREST caps each response at 1000 rows regardless of &limit, so we page
+// through with the Range header until we've pulled everything in the window.
 async function loadRows() {
   const sinceISO = new Date(Date.now() - LOOKBACK_DAYS * 864e5).toISOString();
-  const url =
+  const base =
     `${SUPABASE_URL}/rest/v1/call_activity` +
     `?select=rep_name,ts,direction,duration_sec,connected` +
     `&ts=gte.${encodeURIComponent(sinceISO)}` +
-    `&order=ts.desc&limit=50000`;
-  const resp = await fetch(url, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-  });
-  if (!resp.ok) throw new Error(`Supabase ${resp.status}: ${await resp.text()}`);
-  const rows = await resp.json();
+    `&order=ts.desc`;
+
+  const PAGE = 1000;
+  let from = 0;
+  let all = [];
+  // safety ceiling: 7 days * ~5k/day ≈ 35k; allow up to 200 pages (200k rows)
+  for (let page = 0; page < 200; page++) {
+    const to = from + PAGE - 1;
+    const resp = await fetch(base, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Range: `${from}-${to}`,
+        "Range-Unit": "items",
+      },
+    });
+    if (!resp.ok) throw new Error(`Supabase ${resp.status}: ${await resp.text()}`);
+    const chunk = await resp.json();
+    all = all.concat(chunk);
+    if (chunk.length < PAGE) break; // last page reached
+    from += PAGE;
+  }
+
   // normalize field name to `rep` for the rest of the UI
-  return rows.map((r) => ({
+  return all.map((r) => ({
     rep: r.rep_name, ts: r.ts, direction: r.direction,
     duration_sec: r.duration_sec, connected: r.connected,
   }));
