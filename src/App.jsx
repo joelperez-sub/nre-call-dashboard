@@ -166,6 +166,11 @@ export default function App() {
         @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
         .live-dot { width:7px;height:7px;border-radius:50%;animation:pulse 1.6s infinite; }
         .seg { cursor:pointer; transition:all .15s; }
+        .lb-scroll::-webkit-scrollbar { width:6px; }
+        .lb-scroll::-webkit-scrollbar-track { background:transparent; }
+        .lb-scroll::-webkit-scrollbar-thumb { background:#2a3957; border-radius:3px; }
+        .lb-scroll::-webkit-scrollbar-thumb:hover { background:#3a4d72; }
+        .lb-scroll { scrollbar-width:thin; scrollbar-color:#2a3957 transparent; }
       `}</style>
 
       {status === "error" && (
@@ -319,21 +324,29 @@ function Tile({ label, value, sub, color, pct }) {
 function Leaderboard({ title, rows, max, metric, fmt, color }) {
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "14px 16px" }}>
-      <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, marginBottom: 12 }}>{title}</div>
-      {rows.slice(0, 10).map((r, i) => {
-        const v = metric(r);
-        return (
-          <div key={r.rep} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
-            <div className="disp" style={{ width: 16, fontSize: 11, color: i < 3 ? color : C.dimmer, fontWeight: 700 }}>{i + 1}</div>
-            <div style={{ width: 88, fontSize: 11, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.rep}</div>
-            <div style={{ flex: 1, height: 14, background: C.bg, borderRadius: 3, overflow: "hidden" }}>
-              <div className="bar" style={{ width: `${(v / max) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${color}cc, ${color})`, borderRadius: 3 }} />
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2 }}>{title}</div>
+        <div style={{ fontSize: 9, color: C.dimmer, letterSpacing: 1 }}>{rows.length} reps · scroll</div>
+      </div>
+      <div
+        className="lb-scroll"
+        style={{ maxHeight: 290, overflowY: "auto", paddingRight: 6, position: "relative", maskImage: "linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)", WebkitMaskImage: "linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)" }}
+      >
+        {rows.map((r, i) => {
+          const v = metric(r);
+          return (
+            <div key={r.rep} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+              <div className="disp" style={{ width: 16, fontSize: 11, color: i < 3 ? color : C.dimmer, fontWeight: 700 }}>{i + 1}</div>
+              <div style={{ width: 88, fontSize: 11, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.rep}</div>
+              <div style={{ flex: 1, height: 14, background: C.bg, borderRadius: 3, overflow: "hidden" }}>
+                <div className="bar" style={{ width: `${(v / max) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${color}cc, ${color})`, borderRadius: 3 }} />
+              </div>
+              {i === 0 && <span style={{ fontSize: 12 }}>🔥</span>}
+              <div className="disp" style={{ width: 56, textAlign: "right", fontSize: 12, color: C.text, fontWeight: 600 }}>{fmt(v)}</div>
             </div>
-            {i === 0 && <span style={{ fontSize: 12 }}>🔥</span>}
-            <div className="disp" style={{ width: 56, textAlign: "right", fontSize: 12, color: C.text, fontWeight: 600 }}>{fmt(v)}</div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
