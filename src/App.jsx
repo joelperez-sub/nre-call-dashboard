@@ -86,6 +86,7 @@ const fmtRefresh = (ms) =>
 export default function App() {
   const [rows, setRows] = useState([]);
   const [scope, setScope] = useState("day");
+  const [dir, setDir] = useState("all"); // all | outbound | inbound
   const [now, setNow] = useState(new Date());
   const [status, setStatus] = useState("loading"); // loading | ok | error
   const [errMsg, setErrMsg] = useState("");
@@ -104,10 +105,10 @@ export default function App() {
   const refreshStale = lastRefresh != null && (now.getTime() - lastRefresh) / 60000 > STALE_MIN;
 
   const tKey = todayKey();
-  const scoped = useMemo(
-    () => (scope === "day" ? rows.filter((r) => dayKey(r.ts) === tKey) : rows),
-    [rows, scope, tKey]
-  );
+  const scoped = useMemo(() => {
+    const base = scope === "day" ? rows.filter((r) => dayKey(r.ts) === tKey) : rows;
+    return dir === "all" ? base : base.filter((r) => r.direction === dir);
+  }, [rows, scope, tKey, dir]);
 
   const byRep = useMemo(() => {
     const m = {};
@@ -203,6 +204,7 @@ export default function App() {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <DirToggle dir={dir} setDir={setDir} />
           <Segmented scope={scope} setScope={setScope} />
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -222,7 +224,7 @@ export default function App() {
       {/* TOP TILES */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
         <Tile label="TEAM DIALS" value={team.dials.toLocaleString()} sub={scope === "day" ? "today" : `last ${LOOKBACK_DAYS} days`} color={C.lime} />
-        <Tile label="TEAM TALK TIME" value={fmtHM(team.talk)} sub={`all calls · ${(team.talk / Math.max(1, scoped.filter((r) => (r.duration_sec || 0) > 0).length) / 60).toFixed(1)}m avg / talked`} color={C.cyan} />
+        <Tile label="TEAM TALK TIME" value={fmtHM(team.talk)} sub={`${dir === "all" ? "all calls" : dir} · ${(team.talk / Math.max(1, scoped.filter((r) => (r.duration_sec || 0) > 0).length) / 60).toFixed(1)}m avg / talked`} color={C.cyan} />
         <Tile label="CONNECT RATE" value={`${(team.rate * 100).toFixed(0)}%`} sub={`${team.conn.toLocaleString()} connects · 60s+`} color={C.amber} pct={team.rate} />
         <Tile label="BEST HOUR TO DIAL" value={bestHour ? `${pad(bestHour.hour)}:00` : "—"} sub={bestHour ? `${((bestHour.conn / Math.max(1, bestHour.dials)) * 100).toFixed(0)}% connect` : ""} color={C.violet} />
       </div>
@@ -322,6 +324,17 @@ function Segmented({ scope, setScope }) {
   );
   return <div style={{ display: "flex", gap: 4, background: C.panel, padding: 4, borderRadius: 6, border: `1px solid ${C.line}` }}>
     {opt("day", "TODAY")}{opt("week", "WEEK")}</div>;
+}
+
+function DirToggle({ dir, setDir }) {
+  const opt = (key, label) => (
+    <div className="seg disp" onClick={() => setDir(key)}
+      style={{ padding: "6px 12px", fontSize: 11, fontWeight: 700, letterSpacing: 1, borderRadius: 4,
+        background: dir === key ? C.panelHi : "transparent", color: dir === key ? C.text : C.dim,
+        border: `1px solid ${dir === key ? C.line : "transparent"}` }}>{label}</div>
+  );
+  return <div style={{ display: "flex", gap: 4, background: C.panel, padding: 4, borderRadius: 6, border: `1px solid ${C.line}` }}>
+    {opt("all", "ALL")}{opt("outbound", "OUT")}{opt("inbound", "IN")}</div>;
 }
 
 function Tile({ label, value, sub, color, pct }) {
