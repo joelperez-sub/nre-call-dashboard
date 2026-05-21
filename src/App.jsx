@@ -43,8 +43,13 @@ async function loadRows() {
 }
 
 // ---- HELPERS --------------------------------------------------------------
+// All day/hour math is done in Arizona time (Phoenix = UTC-7, no daylight saving).
+const AZ_OFFSET_MS = 7 * 60 * 60 * 1000;
 const pad = (n) => String(n).padStart(2, "0");
-const dayKey = (iso) => iso.slice(0, 10);
+// shift a UTC timestamp back 7h, then read the date/hour as if local
+const azDate = (iso) => new Date(new Date(iso).getTime() - AZ_OFFSET_MS);
+const dayKey = (iso) => azDate(iso).toISOString().slice(0, 10);
+const azHour = (iso) => azDate(iso).getUTCHours();
 const fmtHM = (sec) => { const h = Math.floor(sec / 3600); const m = Math.round((sec % 3600) / 60); return h > 0 ? `${h}h ${pad(m)}m` : `${m}m`; };
 const fmtClock = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 const todayKey = () => dayKey(new Date().toISOString());
@@ -91,7 +96,7 @@ export default function App() {
 
   const byHour = useMemo(() => {
     const h = Array.from({ length: 24 }, (_, i) => ({ hour: i, dials: 0, conn: 0 }));
-    scoped.forEach((r) => { const hr = new Date(r.ts).getHours(); h[hr].dials++; if (r.connected) h[hr].conn++; });
+    scoped.forEach((r) => { const hr = azHour(r.ts); h[hr].dials++; if (r.connected) h[hr].conn++; });
     return h.filter((x) => x.hour >= 6 && x.hour <= 20);
   }, [scoped]);
 
@@ -245,13 +250,14 @@ function Ticker({ rows }) {
 }
 
 function ConnectPanel({ rows }) {
-  const sorted = [...rows].sort((a, b) => b.rate - a.rate).slice(0, 10);
+  const sorted = [...rows].sort((a, b) => b.dials - a.dials).slice(0, 10);
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "14px 16px" }}>
-      <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, marginBottom: 12 }}>CONNECT RATE · BY REP</div>
+      <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, marginBottom: 12 }}>CONNECT RATE · BY REP <span style={{ color: C.dimmer }}>(dials shown)</span></div>
       {sorted.map((r) => (
         <div key={r.rep} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
           <div style={{ width: 96, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.rep}</div>
+          <div style={{ width: 38, fontSize: 10, color: C.dim, textAlign: "right" }}>{r.dials}</div>
           <div style={{ flex: 1, height: 14, background: C.bg, borderRadius: 3, overflow: "hidden" }}>
             <div className="bar" style={{ width: `${r.rate * 100}%`, height: "100%", background: `linear-gradient(90deg, ${C.amber}aa, ${C.amber})`, borderRadius: 3 }} />
           </div>
