@@ -279,10 +279,11 @@ function TimeOfDayPanel({ byHour, peak, best }) {
       <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 130 }}>
         {byHour.map((h) => {
           const rate = h.dials ? h.conn / h.dials : 0;
-          const col = rate > 0.15 ? C.lime : rate > 0.08 ? C.amber : C.red;
+          const col = rate > 0.12 ? C.lime : rate > 0.06 ? C.amber : C.red;
+          const px = Math.round((h.dials / max) * 120);
           return (
-            <div key={h.hour} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-              <div className="bar" style={{ width: "100%", height: `${(h.dials / max) * 100}%`, minHeight: 2, background: col, opacity: 0.55 + rate * 0.45, borderRadius: "2px 2px 0 0" }} />
+            <div key={h.hour} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 5 }}>
+              <div className="bar" style={{ width: "100%", height: `${h.dials > 0 ? Math.max(px, 4) : 0}px`, background: col, opacity: 0.7 + rate * 0.3, borderRadius: "2px 2px 0 0" }} />
               <div style={{ fontSize: 8, color: C.dimmer }}>{pad(h.hour)}</div>
             </div>
           );
